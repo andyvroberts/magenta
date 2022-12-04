@@ -10,6 +10,8 @@ using Newtonsoft.Json;
 
 namespace LandReg
 {
+    using LandReg.Models;
+
     public static class GetPrices
     {
         [FunctionName("GetPrices")]
