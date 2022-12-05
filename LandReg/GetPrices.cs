@@ -20,7 +20,7 @@ namespace LandReg
         [FunctionName("GetPrices")]
         public static async Task<IActionResult> GetPriceList(
             [HttpTrigger(AuthorizationLevel.Function, "get", Route = "postcode/{startsWith}")] HttpRequest req,
-            [Table("LandregPrice", Connection="blah")] TableClient priceTable,
+            [Table("LandregPrice", Connection = "LandregDataStorage")] TableClient priceTable,
             ILogger log,
             string startsWith)
         {
@@ -29,7 +29,7 @@ namespace LandReg
             var source = new System.Threading.CancellationTokenSource();
             var ct = source.Token;
 
-            string partKey = startsWith.Split(' ')[0];
+            string partKey = startsWith.Split(' ')[0].ToUpper();
             string startScan = startsWith.ToUpper();
             string endScan = startScan.Substring(0, startScan.Length - 1) + (char)(startScan.Last() + 1);
 
@@ -37,7 +37,7 @@ namespace LandReg
             var queryFilter = $"(PartitionKey eq '{partKey}') and ((RowKey ge '{startScan}') and (RowKey lt '{endScan}'))";
             log.LogInformation($"Search Filter = {queryFilter}");
 
-            AsyncPageable<PriceData> queryResults = 
+            AsyncPageable<PriceData> queryResults =
                 priceTable.QueryAsync<PriceData>(
                     filter: queryFilter,
                     maxPerPage: 100,
@@ -52,11 +52,11 @@ namespace LandReg
                 {
                     returnData.AddRange(landregPrice.DataToPrices());
                 }
-                
+
                 // note: if you set the cancellation token then entire process aborts, maybe
                 // this would be useful to test if it nears an execution duration time limit.
                 //source.Cancel();
-                
+
                 // limit the request to a single page.
                 break;
             }
@@ -68,7 +68,7 @@ namespace LandReg
             }
             else
             {
-                return new NotFoundObjectResult($"No records found in LOCALITY partition of {priceTable.Name} table");
+                return new NotFoundObjectResult($"No records found in Outcode partition of {priceTable.Name}.");
             }
         }
     }
