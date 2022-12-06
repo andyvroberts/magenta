@@ -17,9 +17,13 @@ namespace LandReg
 
     public static class GetPrices
     {
-        [FunctionName("GetPrices")]
-        public static async Task<IActionResult> GetPriceList(
-            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "postcode/{startsWith}")] HttpRequest req,
+        /// <summary>
+        /// Perform a scan for price records.
+        /// The http request value must be at least a partial postcode with the complete outcode.
+        /// </summary>
+        [FunctionName("GetPricesByScan")]
+        public static async Task<IActionResult> GetPriceListByScan(
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "postcode/scan/{startsWith}")] HttpRequest req,
             [Table("LandregPrice", Connection = "LandregDataStorage")] TableClient priceTable,
             ILogger log,
             string startsWith)
@@ -28,6 +32,7 @@ namespace LandReg
 
             var source = new System.Threading.CancellationTokenSource();
             var ct = source.Token;
+            int maxPageCount = 4;
 
             string partKey = startsWith.Split(' ')[0].ToUpper();
             string startScan = startsWith.ToUpper();
@@ -40,27 +45,11 @@ namespace LandReg
             AsyncPageable<PriceData> queryResults =
                 priceTable.QueryAsync<PriceData>(
                     filter: queryFilter,
-                    maxPerPage: 100,
+                    maxPerPage: 500,
                     cancellationToken: ct
                 );
 
-            List<PriceResult> returnData = new();
-
-            await foreach (Page<PriceData> locPage in queryResults.AsPages())
-            {
-                foreach (PriceData landregPrice in locPage.Values)
-                {
-                    returnData.AddRange(landregPrice.DataToPrices());
-                }
-
-                // note: if you set the cancellation token then entire process aborts, maybe
-                // this would be useful to test if it nears an execution duration time limit.
-                //source.Cancel();
-
-                // limit the request to a single page.
-                break;
-            }
-            log.LogInformation($"Accessed {returnData.Count} Localities from the data store.");
+            List<PriceResult> returnData = await TableQueryPagination(log, maxPageCount, queryResults);
 
             if (returnData.Any())
             {
@@ -70,6 +59,64 @@ namespace LandReg
             {
                 return new NotFoundObjectResult($"No records found in Outcode partition of {priceTable.Name}.");
             }
+        }
+
+        /// <summary>
+        /// Perform an exact postcode seach for price records.
+        /// </summary>
+        [FunctionName("GetPricesByPostcode")]
+        public static async Task<IActionResult> GetPriceListByPostcode(
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "postcode/{pCode}")] HttpRequest req,
+            [Table("LandregPrice", Connection = "LandregDataStorage")] TableClient priceTable,
+            ILogger log,
+            string pCode)
+        {
+            int rowsPerPage = 500;
+            int maxPageCount = 2;
+
+            string partKey = pCode.Split(' ')[0].ToUpper();
+            string rowKey = pCode.ToUpper();
+            log.LogInformation($"Search partition key = {partKey} and row key = {rowKey}.");
+
+            AsyncPageable<PriceData> queryResults =
+                priceTable.QueryAsync<PriceData>(x => x.PartitionKey == partKey && x.RowKey == rowKey, maxPerPage: rowsPerPage);
+
+            List<PriceResult> returnData = await TableQueryPagination(log, maxPageCount, queryResults);
+
+            if (returnData.Any())
+            {
+                return new OkObjectResult(returnData);
+            }
+            else
+            {
+                return new NotFoundObjectResult($"No records found in Outcode partition of {priceTable.Name}.");
+            }
+        }
+
+        /// <summary>
+        /// The common pagination method for accessing the Azure table service.
+        /// </summary>
+        private static async Task<List<PriceResult>> TableQueryPagination(ILogger log, int maxPageCount, AsyncPageable<PriceData> queryResults)
+        {
+            List<PriceResult> returnData = new();
+            int pageCounter = 0;
+
+            await foreach (Page<PriceData> pricePage in queryResults.AsPages())
+            {
+                pageCounter++;
+                foreach (PriceData landregPrice in pricePage.Values)
+                {
+                    returnData.AddRange(landregPrice.DataToPrices());
+                }
+
+                if (pageCounter == maxPageCount)
+                {
+                    log.LogInformation($"Maximum pages reached {pageCounter}.");
+                    break;
+                }
+            }
+            log.LogInformation($"Retrieved {returnData.Count} Localities from the data store.");
+            return returnData;
         }
     }
 }
