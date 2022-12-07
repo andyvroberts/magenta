@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using LandReg.Models;
 using System.Linq;
+using System.Text;
 
 namespace LandReg.Converters
 {
@@ -11,7 +12,7 @@ namespace LandReg.Converters
             List<PriceResult> priceList = new();
 
             List<string> prices = pd.Prices.Split(',').ToList();
-            foreach(string p in prices)
+            foreach (string p in prices)
             {
                 string[] priceParts = p.Split('~');
 
@@ -27,5 +28,25 @@ namespace LandReg.Converters
 
             return priceList;
         }
+
+        public static string ToCsv<T>(this IEnumerable<T> recs)
+            where T : class
+        {
+            var csvBuilder = new StringBuilder();
+            var properties = typeof(T).GetProperties();
+
+            // header
+            string head = string.Join(",", properties.Select(h => h.Name).ToArray());
+            csvBuilder.AppendLine(head);
+
+            // records
+            foreach (T item in recs)
+            {
+                string line = string.Join(",", properties.Select(p => p.GetValue(item, null)).ToArray());
+                csvBuilder.AppendLine(line);
+            }
+            return csvBuilder.ToString();
+        }
+
     }
 }
