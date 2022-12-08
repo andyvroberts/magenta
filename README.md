@@ -1,5 +1,5 @@
 # Magenta
-A data API using resource locators and identifiers as a middleware for client applications. Built using C#.  
+A data API using HTTP trigger functions, as a middleware for client applications. Built using C#.  
 
 ## Landreg Prices
 Create a Function App that is triggered by an HTTP request for:  
